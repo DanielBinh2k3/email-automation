@@ -230,46 +230,91 @@ const EmailEditor = () => {
     }
   };
 
+  // Thêm state mới để theo dõi việc chuyển đổi định dạng
+  const [convertedFormat, setConvertedFormat] = useState(null);
+  
   const scoreEmail = async () => {
     setIsScoring(true);
     setShowScoreModal(true);
-    toast.info(<div><img src={loadingGif} alt="Loading..." style={{ width: '20px', height: '20px', marginRight: '8px' }} /> Đang chấm điểm...</div>, {autoClose: false, toastId: 'scoringToast' }); // Keep toast open
+    toast.info(<div><img src={loadingGif} alt="Loading..." style={{ width: '20px', height: '20px', marginRight: '8px' }} /> Đang chấm điểm...</div>, {autoClose: false, toastId: 'scoringToast' });
+    
     try {
+      let emailToScore = emailContent;
+      let formatToUse = emailParams.outputFormat;
+      
+      // Nếu định dạng là HTML, hãy thử chuyển đổi trước
+      if (emailParams.outputFormat === 'html' && !convertedFormat) {
+        try {
+          // Hiển thị thông báo chuyển đổi
+          toast.info('Đang chuyển đổi HTML sang định dạng phù hợp...', {autoClose: 2000});
+          
+          // Gọi API để chuyển đổi HTML sang markdown hoặc text
+          const conversionResponse = await fetch('https://email-api-c91g.onrender.com/api/convert-format', {
+            method: 'POST',
+            headers: {
+              'Content-Type': 'application/json',
+            },
+            body: JSON.stringify({
+              content: emailContent,
+              fromFormat: 'html',
+              toFormat: 'markdown',
+              model: selectedModel,
+            }),
+          });
+          
+          if (conversionResponse.ok) {
+            const convData = await conversionResponse.json();
+            if (convData.convertedContent) {
+              emailToScore = convData.convertedContent;
+              formatToUse = 'markdown';
+              setConvertedFormat({
+                content: emailToScore,
+                format: formatToUse
+              });
+            }
+          }
+        } catch (convError) {
+          console.error('Lỗi khi chuyển đổi định dạng:', convError);
+          // Tiếp tục với HTML nguyên bản nếu chuyển đổi thất bại
+        }
+      } else if (convertedFormat) {
+        // Sử dụng phiên bản đã chuyển đổi nếu có
+        emailToScore = convertedFormat.content;
+        formatToUse = convertedFormat.format;
+      }
+      
+      // Gửi yêu cầu chấm điểm với nội dung đã xử lý
       const response = await fetch('https://email-api-c91g.onrender.com/api/score-email', {
         method: 'POST',
         headers: {
           'Content-Type': 'application/json',
         },
         body: JSON.stringify({
-          emailContent: emailContent,
+          emailContent: emailToScore,
           model: selectedModel,
-          outputFormat: emailParams.outputFormat,
+          outputFormat: formatToUse,
           temperature: emailParams.temperature,
         }),
       });
-
+  
       if (!response.ok) {
         const errorData = await response.json();
         throw new Error(`HTTP error! status: ${response.status}, detail: ${errorData.detail}`);
       }
-
+  
       const data = await response.json();
-
+      
       if (data && data.scores && data.suggestions) {
         setScores(data.scores);
         setSuggestions(data.suggestions);
         toast.dismiss('scoringToast');
         toast.success("Chấm điểm thành công!")
       } else {
-        console.error("Invalid response format:", data);
-        toast.dismiss('scoringToast');
-        toast.error("Đã nhận được định dạng phản hồi không mong muốn từ máy chủ. Vui lòng thử lại.");
-        setShowScoreModal(false);
+        throw new Error("Định dạng phản hồi không hợp lệ");
       }
-
     } catch (error) {
       console.error('Lỗi khi chấm điểm email:', error);
-       toast.dismiss('scoringToast');
+      toast.dismiss('scoringToast');
       toast.error(`Lỗi khi chấm điểm email: ${error.message}`);
       setShowScoreModal(false);
     } finally {
