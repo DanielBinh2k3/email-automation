@@ -1,13 +1,9 @@
-import React, { useState, useEffect } from 'react'; // Import useEffect
+import React, { useState, useEffect } from 'react';
 import {
   Bold, Italic, AlignLeft, AlignCenter, AlignRight,
   Link, Image, Undo, Redo, Sparkles, X, Send, Bot, CheckCircle,
 } from 'lucide-react';
-import { GoogleGenerativeAI } from "@google/generative-ai";
 import Modal from 'react-modal';
-import { PromptTemplate } from "@langchain/core/prompts";
-import { StructuredOutputParser } from "langchain/output_parsers";
-import { z } from "zod";
 import { ToastContainer, toast } from 'react-toastify';
 import 'react-toastify/dist/ReactToastify.css';
 
@@ -63,7 +59,6 @@ const EmailEditor = () => {
     }));
   }, []);
 
-
   const toolbarButtons = [
     { icon: <Bold size={18} />, label: 'Bold' },
     { icon: <Italic size={18} />, label: 'Italic' },
@@ -107,142 +102,101 @@ const EmailEditor = () => {
     });
   };
 
-  const callGeminiAPI = async (prompt) => {
-    const genAI = new GoogleGenerativeAI(process.env.REACT_APP_GOOGLE_GEMINI_API_KEY);
-    const model = genAI.getGenerativeModel({ model: "gemini-2.0-flash" });
-    const result = await model.generateContent(prompt);
-    const response = await result.response;
-    return response.text();
-  };
-
-  const callGeminiWithStructuredOutput = async (prompt, outputSchema) => {
-    try {
-      const genAI = new GoogleGenerativeAI(process.env.REACT_APP_GOOGLE_GEMINI_API_KEY);
-      const model = genAI.getGenerativeModel({ model: "gemini-2.0-flash" });
-
-      const parser = StructuredOutputParser.fromZodSchema(outputSchema);
-      const formatInstructions = parser.getFormatInstructions();
-
-      const promptTemplate = new PromptTemplate({
-        template: `{prompt}\n\n{format_instructions}`,
-        inputVariables: ["prompt"],
-        partialVariables: { format_instructions: formatInstructions },
-      });
-
-      const formattedPrompt = await promptTemplate.format({ prompt });
-      const result = await model.generateContent(formattedPrompt);
-      const response = await result.response;
-      const text = response.text();
-      return await parser.parse(text);
-
-    } catch (error) {
-      console.error("Lỗi trong quá trình gọi API có cấu trúc:", error);
-      throw error;
-    }
-  };
-
-
   const generateEmail = async () => {
     setIsGenerating(true);
     try {
-      const prompt = `
-        Tạo một email dựa trên các thông tin sau:
+      const response = await fetch('http://localhost:8000/api/generate-email', {
+        method: 'POST',
+        headers: {
+          'Content-Type': 'application/json',
+        },
+        body: JSON.stringify(emailParams),
+      });
 
-        Thông tin người bán:
-        - Tên: ${emailParams.sales_info.name}
-        - Chức vụ: ${emailParams.sales_info.title}
-        - Số điện thoại: ${emailParams.sales_info.contact_info.phone}
-        - Email: ${emailParams.sales_info.contact_info.email}
+      if (!response.ok) {
+        const errorData = await response.json();
+        throw new Error(`HTTP error! status: ${response.status}, detail: ${errorData.detail}`);
+      }
 
-        Thông tin khách hàng:
-        - Tên: ${emailParams.customer_info.name}
-        - Chức vụ: ${emailParams.customer_info.title}
-        - Công ty: ${emailParams.customer_info.company}
-        - Số điện thoại: ${emailParams.customer_info.contact_info.phone}
-        - Email: ${emailParams.customer_info.contact_info.email}
-
-        Nội dung email:
-        ${emailParams.emailContext}
-
-        Giọng văn mong muốn: ${emailParams.tone}
-        Độ dài mong muốn: ${emailParams.length}
-
-        Vui lòng tạo một email hoàn chỉnh, được định dạng tốt.
-      `;
-      const generatedEmail = await callGeminiAPI(prompt);
-      setEmailContent(generatedEmail);
+      const data = await response.json();
+      // data is already an object with { generatedEmail: ... }
+      setEmailContent(data.generatedEmail); // Access directly
       setShowSuccessBar(true);
+      toast.success("Email đã được tạo thành công!");
+
     } catch (error) {
       console.error('Lỗi khi tạo email:', error);
-      alert(`Lỗi khi tạo email: ${error.message}`);
+      toast.error(`Lỗi khi tạo email: ${error.message}`);
     } finally {
       setIsGenerating(false);
     }
   };
 
-  const refineEmail = async (refinementType) => {
-    setIsRefining(true);
-    try {
-      let prompt = '';
-      switch (refinementType) {
-        case 'professional':
-          prompt = `Chỉnh sửa email sau để làm cho nó chuyên nghiệp hơn:\n\n${emailContent}`;
-          break;
-        case 'shorter':
-          prompt = `Chỉnh sửa email sau để làm cho nó ngắn gọn và súc tích hơn:\n\n${emailContent}`;
-          break;
-        case 'personalized':
-          prompt = `Chỉnh sửa email sau để làm cho nó cá nhân hóa hơn, xưng hô với người nhận bằng tên (${emailParams.customer_info.name}) và đề cập đến công ty của họ (${emailParams.customer_info.company}):\n\n${emailContent}`;
-          break;
-        default:
-          return;
-      }
-      const refinedEmail = await callGeminiAPI(prompt);
-      setEmailContent(refinedEmail);
-    } catch (error) {
-      console.error('Lỗi khi tinh chỉnh email:', error);
-      alert(`Lỗi khi tinh chỉnh email: ${error.message}`);
-    } finally {
-      setIsRefining(false);
-    }
-  };
+    const refineEmail = async (refinementType) => {
+        setIsRefining(true);
+        try {
+            const requestBody = {
+                emailContent: emailContent,
+                refinementType: refinementType,
+                suggestions: refinementType === 'improvement' ? suggestions : undefined,
+            };
+            const response = await fetch('http://localhost:8000/api/refine-email', {
+                method: 'POST',
+                headers: { 'Content-Type': 'application/json' },
+                body: JSON.stringify(requestBody),
+            });
+
+            if (!response.ok) {
+                const errorData = await response.json();
+                throw new Error(`HTTP error! status: ${response.status}, detail: ${errorData.detail}`);
+            }
+
+            const data = await response.json();
+             // data is already an object with { refinedEmail: ... }
+            setEmailContent(data.refinedEmail); // Access directly
+            toast.success("Email đã được tinh chỉnh thành công!");
+
+        } catch (error) {
+            console.error('Lỗi khi tinh chỉnh email:', error);
+            toast.error(`Lỗi khi tinh chỉnh: ${error.message}`);
+        } finally {
+            setIsRefining(false);
+        }
+    };
 
   const scoreEmail = async () => {
     setIsScoring(true);
     setShowScoreModal(true);
     try {
-      const emailEvaluationSchema = z.object({
-        scores: z.object({
-          subjectLine: z.number().min(0).max(10),
-          writingStyle: z.number().min(0).max(10),
-          content: z.number().min(0).max(10),
-          structure: z.number().min(0).max(10),
-          personalization: z.number().min(0).max(10),
-        }),
-        suggestions: z.string(),
+      const response = await fetch('http://localhost:8000/api/score-email', {
+        method: 'POST',
+        headers: {
+          'Content-Type': 'application/json',
+        },
+        body: JSON.stringify({ emailContent: emailContent }),
       });
 
-      const scoringPrompt = `
-        Bạn là một chuyên gia đánh giá email.  Hãy đánh giá email sau và cung cấp:
-        1. Điểm số từ 0 đến 10 cho mỗi tiêu chí sau:
-           - Tiêu đề
-           - Cách viết
-           - Nội dung
-           - Cấu trúc và định dạng
-           - Cá nhân hóa
-        2. Đề xuất cải thiện *ngắn gọn* cho email. Tóm tắt các ý chính, không cần giải thích dài dòng.
+      if (!response.ok) {
+        const errorData = await response.json();
+        throw new Error(`HTTP error! status: ${response.status}, detail: ${errorData.detail}`);
+      }
 
-        Email cần đánh giá:
-        ${emailContent}
-      `;
+      const data = await response.json();
 
-      const evaluationResult = await callGeminiWithStructuredOutput(scoringPrompt, emailEvaluationSchema);
-      setScores(evaluationResult.scores);
-      setSuggestions(evaluationResult.suggestions);
+      // Now data is already parsed, so you access it directly
+        if (data && data.scores && data.suggestions) {
+            setScores(data.scores);
+            setSuggestions(data.suggestions);
+        } else {
+            console.error("Invalid response format:", data);
+            toast.error("Đã nhận được định dạng phản hồi không mong muốn từ máy chủ. Vui lòng thử lại.");
+            setShowScoreModal(false); // Hide on error
+
+        }
 
     } catch (error) {
       console.error('Lỗi khi chấm điểm email:', error);
-      alert(`Lỗi khi chấm điểm email: ${error.message}`);
+      toast.error(`Lỗi khi chấm điểm email: ${error.message}`);
       setShowScoreModal(false);
     } finally {
       setIsScoring(false);
@@ -256,25 +210,12 @@ const EmailEditor = () => {
   const autoSuggest = async () => {
     setIsGenerating(true);
     try {
-      const improvementPrompt = `
-        Dựa trên phản hồi của chuyên gia, hãy viết lại và cải thiện email sau.  Cố gắng đạt được điểm số hoàn hảo.
-
-        Email gốc:
-        ${emailContent}
-
-        Phản hồi và đề xuất ngắn gọn:
-        ${suggestions}
-
-        Email đã cải thiện:
-      `;
-      const improvedEmail = await callGeminiAPI(improvementPrompt);
-      setEmailContent(improvedEmail);
-      toast.success("Email đã được cải thiện thành công!");
+      await refineEmail('improvement');
+      toast.success("Email đã được cải thiện thành công!");  // Now handled by refineEmail
       closeModal();
     } catch (error) {
-      console.error('Lỗi khi tự động gợi ý email:', error);
-      toast.error(`Lỗi: ${error.message}`);
-
+        console.error('Lỗi khi tự động gợi ý email:', error);
+      // Error toast is handled by refineEmail
     } finally {
       setIsGenerating(false);
     }
