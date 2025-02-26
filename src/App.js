@@ -27,8 +27,9 @@ const EmailEditor = () => {
     personalization: 0,
   });
   const [suggestions, setSuggestions] = useState("");
-  const [modalLoading, setModalLoading] = useState(false);
-  const [scoringLoadingMessage, setScoringLoadingMessage] = useState(""); // New state for scoring loading message
+  // Model selection state
+  const [availableModels, setAvailableModels] = useState([]);
+  const [selectedModel, setSelectedModel] = useState(""); // Directly store the selected model name
 
 
   const [emailParams, setEmailParams] = useState({
@@ -49,18 +50,52 @@ const EmailEditor = () => {
         email: 'tranthib@congtyabc.com'
       }
     },
-    emailContext: '', // Will be populated in useEffect
+    emailContext: '',
     tone: 'professional',
     length: 'medium',
+    outputFormat: 'markdown', // Default output format
+    model: '', // Initialize model as empty string
+    temperature: 0.7,
   });
 
-  // Use useEffect to set the default emailContext
+  // Fetch available models on component mount
   useEffect(() => {
-    setEmailParams(prevParams => ({
-      ...prevParams,
-      emailContext: "Giới thiệu sản phẩm phần mềm quản lý doanh nghiệp Fastwork, bao gồm các tính năng nổi bật như quản lý công việc, quản lý nhân sự, quản lý khách hàng, và quản lý tài chính. Nhấn mạnh vào lợi ích của phần mềm trong việc nâng cao hiệu quả hoạt động và tăng trưởng doanh thu cho doanh nghiệp."
-    }));
-  }, []);
+    const fetchModels = async () => {
+      try {
+        const response = await fetch('https://email-api-c91g.onrender.com/api/models');
+        if (!response.ok) {
+          throw new Error(`HTTP error! status: ${response.status}`);
+        }
+        const data = await response.json();
+        // Assuming the API returns an array of model names like:  { models: [ {name: "model1"}, {name: "model2"}]}
+        setAvailableModels(data.models);
+
+        // Set a default model if available and no model is selected
+        if (data.models.length > 0 && !selectedModel) {
+          setSelectedModel(data.models[0].name);  // Select the first model
+          setEmailParams(prevParams => ({
+            ...prevParams,
+            model: data.models[0].name, // Set the initial model in emailParams too
+          }));
+        }
+
+      } catch (error) {
+        console.error("Could not fetch models:", error);
+        toast.error(`Failed to fetch models: ${error.message}`);
+      }
+    };
+
+    fetchModels();
+  }, []); // Empty dependency array means this runs once on mount
+
+    // Add useEffect to set default emailContext
+    useEffect(() => {
+        setEmailParams(prevParams => ({
+        ...prevParams,
+        emailContext: "Giới thiệu sản phẩm phần mềm quản lý doanh nghiệp Fastwork, bao gồm các tính năng nổi bật như quản lý công việc, quản lý nhân sự, quản lý khách hàng, và quản lý tài chính. Nhấn mạnh vào lợi ích của phần mềm trong việc nâng cao hiệu quả hoạt động và tăng trưởng doanh thu cho doanh nghiệp."
+        }));
+    }, []);
+
 
   const toolbarButtons = [
     { icon: <Bold size={18} />, label: 'Bold' },
@@ -104,11 +139,35 @@ const EmailEditor = () => {
       }
     });
   };
+  // Function to handle model selection
+  const handleModelChange = (event) => {
+      const modelName = event.target.value;
+        setSelectedModel(modelName);
+        setEmailParams(prevParams => ({
+          ...prevParams,
+          model: modelName  // Update the model in emailParams
+        }));
+  };
+
+    const resetEmailGeneration = () => {
+        setScores({
+            subjectLine: 0,
+            writingStyle: 0,
+            content: 0,
+            structure: 0,
+            personalization: 0,
+        });
+        setSuggestions("");
+    }
 
   const generateEmail = async () => {
+    // Reset scores and suggestions before generating
+    resetEmailGeneration();
+
     setIsGenerating(true);
+    toast.info(<div><img src={loadingGif} alt="Loading..." style={{ width: '20px', height: '20px', marginRight: '8px' }} /> Mô hình đang tạo email...</div>, { autoClose: false, toastId: 'loadingToast' }); // Keep toast open
     try {
-      const response = await fetch('http://localhost:8000/api/generate-email', {
+      const response = await fetch('https://email-api-c91g.onrender.com/api/generate-email', {
         method: 'POST',
         headers: {
           'Content-Type': 'application/json',
@@ -124,21 +183,12 @@ const EmailEditor = () => {
       const data = await response.json();
       setEmailContent(data.generatedEmail);
       setShowSuccessBar(true);
+      toast.dismiss('loadingToast'); // Dismiss loading toast
       toast.success("Email đã được tạo thành công!");
-
-      // Reset scores and suggestions on new email generation:
-      setScores({
-        subjectLine: 0,
-        writingStyle: 0,
-        content: 0,
-        structure: 0,
-        personalization: 0,
-      });
-      setSuggestions("");
-
 
     } catch (error) {
       console.error('Lỗi khi tạo email:', error);
+      toast.dismiss('loadingToast'); // Dismiss loading toast
       toast.error(`Lỗi khi tạo email: ${error.message}`);
     } finally {
       setIsGenerating(false);
@@ -146,13 +196,18 @@ const EmailEditor = () => {
   };
 
   const refineEmail = async (refinementType) => {
+    setIsRefining(true);
+    toast.info(<div><img src={loadingGif} alt="Loading..." style={{ width: '20px', height: '20px', marginRight: '8px' }} /> Đang tinh chỉnh...</div>, { autoClose: false, toastId: 'refiningToast' }); // Keep toast open
     try {
       const requestBody = {
         emailContent: emailContent,
         refinementType: refinementType,
         suggestions: refinementType === 'improvement' ? suggestions : undefined,
+        model: selectedModel, // Include selected model
+        outputFormat: emailParams.outputFormat,
+        temperature: emailParams.temperature,
       };
-      const response = await fetch('http://localhost:8000/api/refine-email', {
+      const response = await fetch('https://email-api-c91g.onrender.com/api/refine-email', {
         method: 'POST',
         headers: { 'Content-Type': 'application/json' },
         body: JSON.stringify(requestBody),
@@ -163,25 +218,34 @@ const EmailEditor = () => {
       }
       const data = await response.json();
       setEmailContent(data.refinedEmail);
+      toast.dismiss('refiningToast');
       toast.success("Email đã được tinh chỉnh thành công!");
 
     } catch (error) {
       console.error('Lỗi khi tinh chỉnh email:', error);
+      toast.dismiss('refiningToast');
       toast.error(`Lỗi khi tinh chỉnh: ${error.message}`);
+    } finally {
+      setIsRefining(false);
     }
   };
 
   const scoreEmail = async () => {
-    setIsScoring(true); // Keep this for the main button
+    setIsScoring(true);
     setShowScoreModal(true);
-    setScoringLoadingMessage("Đang chấm điểm email..."); // Initial loading message
+    toast.info(<div><img src={loadingGif} alt="Loading..." style={{ width: '20px', height: '20px', marginRight: '8px' }} /> Đang chấm điểm...</div>, {autoClose: false, toastId: 'scoringToast' }); // Keep toast open
     try {
-      const response = await fetch('http://localhost:8000/api/score-email', {
+      const response = await fetch('https://email-api-c91g.onrender.com/api/score-email', {
         method: 'POST',
         headers: {
           'Content-Type': 'application/json',
         },
-        body: JSON.stringify({ emailContent: emailContent }),
+        body: JSON.stringify({
+          emailContent: emailContent,
+          model: selectedModel,
+          outputFormat: emailParams.outputFormat,
+          temperature: emailParams.temperature,
+        }),
       });
 
       if (!response.ok) {
@@ -194,44 +258,42 @@ const EmailEditor = () => {
       if (data && data.scores && data.suggestions) {
         setScores(data.scores);
         setSuggestions(data.suggestions);
-        setScoringLoadingMessage(""); // Clear loading message on success
+        toast.dismiss('scoringToast');
+        toast.success("Chấm điểm thành công!")
       } else {
         console.error("Invalid response format:", data);
+        toast.dismiss('scoringToast');
         toast.error("Đã nhận được định dạng phản hồi không mong muốn từ máy chủ. Vui lòng thử lại.");
         setShowScoreModal(false);
-          setScoringLoadingMessage(""); // Clear loading message
-
       }
 
     } catch (error) {
       console.error('Lỗi khi chấm điểm email:', error);
+       toast.dismiss('scoringToast');
       toast.error(`Lỗi khi chấm điểm email: ${error.message}`);
       setShowScoreModal(false);
-        setScoringLoadingMessage(""); // Clear loading message
     } finally {
-      setIsScoring(false); // Keep this for the main button
+      setIsScoring(false);
     }
   };
 
   const closeModal = () => {
     setShowScoreModal(false);
-     setScoringLoadingMessage(""); // Clear loading message
   };
 
   const autoSuggest = async () => {
-    setModalLoading(true);
-    setScoringLoadingMessage("Đang cải thiện email..."); // Set loading message
+    setIsGenerating(true);
+      toast.info(<div><img src={loadingGif} alt="Loading..." style={{ width: '20px', height: '20px', marginRight: '8px' }} />Đang cải thiện...</div>, {autoClose: false, toastId: 'improveToast' });
     try {
       await refineEmail('improvement');
+      toast.dismiss('improveToast');
       toast.success("Email đã được cải thiện thành công!");
       closeModal();
     } catch (error) {
-      console.error('Lỗi khi tự động gợi ý email:', error);
-      // Error toast is handled by refineEmail
+      toast.dismiss('improveToast');
+        console.error('Lỗi khi tự động gợi ý email', error)
     } finally {
-      setModalLoading(false);
-      setScoringLoadingMessage(""); // Clear loading message
-
+      setIsGenerating(false);
     }
   };
 
@@ -313,9 +375,9 @@ const EmailEditor = () => {
                     onClick={button.action}
                     disabled={isRefining}
                   >
-                    {isRefining ? (
+                    {/* {isRefining ? (
                       <img src={loadingGif} alt="Loading..." className="h-5 w-5 inline-block mr-2" />
-                    ) : null}
+                    ) : null} */}
                     {button.label}
                   </button>
                 ))}
@@ -327,9 +389,9 @@ const EmailEditor = () => {
                   onClick={scoreEmail}
                   disabled={isScoring || isGenerating}
                 >
-                  {isScoring ? (
+                  {/* {isScoring ? (
                     <img src={loadingGif} alt="Loading..." className="h-5 w-5 inline-block mr-2" />
-                  ) : null}
+                  ) : null} */}
                   <CheckCircle size={16} className="text-green-500" />
                   AI tự cải thiện
                 </button>
@@ -344,67 +406,59 @@ const EmailEditor = () => {
           style={customStyles}
           contentLabel="AI Email Score"
         >
-          {scoringLoadingMessage ? (
-            <div className="flex items-center justify-center h-full">
-              <img src={loadingGif} alt="Loading..." className="h-12 w-12 mr-2" />
-              <p>{scoringLoadingMessage}</p>
+          <div className="flex w-full">
+            <div className="w-1/3 pr-4">
+              <h2 className="text-lg font-semibold mb-4">Đánh giá Email của AI</h2>
+              <ul>
+                <li className="flex justify-between items-center py-2">
+                  <span>Tiêu đề:</span>
+                  <span className="font-bold">{scores.subjectLine}/10</span>
+                </li>
+                <li className="flex justify-between items-center py-2">
+                  <span>Cách viết:</span>
+                  <span className="font-bold">{scores.writingStyle}/10</span>
+                </li>
+                <li className="flex justify-between items-center py-2">
+                  <span>Nội dung:</span>
+                  <span className="font-bold">{scores.content}/10</span>
+                </li>
+                <li className="flex justify-between items-center py-2">
+                  <span>Cấu trúc:</span>
+                  <span className="font-bold">{scores.structure}/10</span>
+                </li>
+                <li className="flex justify-between items-center py-2">
+                  <span>Cá nhân hóa:</span>
+                  <span className="font-bold">{scores.personalization}/10</span>
+                </li>
+              </ul>
             </div>
-            ) : (
-            <>
-                <div className="flex w-full">
-                <div className="w-1/3 pr-4">
-                    <h2 className="text-lg font-semibold mb-4">Đánh giá Email của AI</h2>
-                    <ul>
-                    <li className="flex justify-between items-center py-2">
-                        <span>Tiêu đề:</span>
-                        <span className="font-bold">{scores.subjectLine}/10</span>
-                    </li>
-                    <li className="flex justify-between items-center py-2">
-                        <span>Cách viết:</span>
-                        <span className="font-bold">{scores.writingStyle}/10</span>
-                    </li>
-                    <li className="flex justify-between items-center py-2">
-                        <span>Nội dung:</span>
-                        <span className="font-bold">{scores.content}/10</span>
-                    </li>
-                    <li className="flex justify-between items-center py-2">
-                        <span>Cấu trúc:</span>
-                        <span className="font-bold">{scores.structure}/10</span>
-                    </li>
-                    <li className="flex justify-between items-center py-2">
-                        <span>Cá nhân hóa:</span>
-                        <span className="font-bold">{scores.personalization}/10</span>
-                    </li>
-                    </ul>
-                </div>
 
-                <div className="w-2/3 pl-4 border-l">
-                    <h2 className="text-lg font-semibold mb-4">Đề xuất</h2>
-                    <p className="whitespace-pre-wrap">{suggestions}</p>
-                </div>
-                </div>
+            <div className="w-2/3 pl-4 border-l">
+              <h2 className="text-lg font-semibold mb-4">Đề xuất</h2>
+              <p className="whitespace-pre-wrap">{suggestions}</p>
+            </div>
+          </div>
 
-                <div className="mt-6 flex justify-end space-x-4">
-                <button
-                    onClick={autoSuggest}
-                    disabled={modalLoading} // Use modalLoading here
-                    className="bg-green-500 hover:bg-green-700 text-white font-bold py-2 px-4 rounded disabled:bg-green-300"
-                >
-                    {modalLoading ? (  // Use modalLoading for the button's loading state
-                        <>
-                            <img src={loadingGif} alt="Loading..." className="h-5 w-5 inline-block mr-2" />
-                            Đang xử lí...
-                        </>
-                    ) : (
-                        "Tự động cải thiện"
-                    )}
-                </button>
-                <button onClick={closeModal} className="bg-gray-500 hover:bg-gray-700 text-white font-bold py-2 px-4 rounded">
-                    Đóng
-                </button>
-                </div>
-            </>
-          )}
+          <div className="mt-6 flex justify-end space-x-4">
+            <button
+              onClick={autoSuggest}
+              disabled={isGenerating}
+              className="bg-green-500 hover:bg-green-700 text-white font-bold py-2 px-4 rounded disabled:bg-green-300"
+            >
+              {/* {isGenerating ? (
+                <>
+                  <img src={loadingGif} alt="Loading..." className="h-5 w-5 inline-block mr-2" />
+                  Đang xử lí...
+                </>
+              ) : (
+                "Tự động cải thiện"
+              )} */}
+              Tự động cải thiện
+            </button>
+            <button onClick={closeModal} className="bg-gray-500 hover:bg-gray-700 text-white font-bold py-2 px-4 rounded">
+              Đóng
+            </button>
+          </div>
         </Modal>
 
         {showAIPanel && (
@@ -496,43 +550,79 @@ const EmailEditor = () => {
               </div>
 
               {/* Email Parameters */}
-              <div className="space-y-3">
+                <div className="space-y-3">
                 <h4 className="font-medium">Nội dung/Bối cảnh Email</h4>
                 <textarea
-                  placeholder="Nội dung email"
-                  className="w-full p-2 border rounded h-24"
-                  value={emailParams.emailContext}
-                  onChange={(e) => setEmailParams(prev => ({ ...prev, emailContext: e.target.value }))}
+                    placeholder="Nội dung email"
+                    className="w-full p-2 border rounded h-24"
+                    value={emailParams.emailContext}
+                    onChange={(e) => setEmailParams(prev => ({ ...prev, emailContext: e.target.value }))}
                 />
                 <h4 className="font-medium">Giọng văn</h4>
                 <select
-                  className="w-full p-2 border rounded"
-                  value={emailParams.tone}
-                  onChange={(e) => setEmailParams(prev => ({ ...prev, tone: e.target.value }))}
+                    className="w-full p-2 border rounded"
+                    value={emailParams.tone}
+                    onChange={(e) => setEmailParams(prev => ({ ...prev, tone: e.target.value }))}
                 >
-                  <option value="professional">Chuyên nghiệp</option>
-                  <option value="friendly">Thân thiện</option>
-                  <option value="formal">Trang trọng</option>
-                  <option value="casual">Thường ngày</option>
+                    <option value="professional">Chuyên nghiệp</option>
+                    <option value="friendly">Thân thiện</option>
+                    <option value="formal">Trang trọng</option>
+                    <option value="casual">Thường ngày</option>
                 </select>
                 <h4 className="font-medium">Độ dài</h4>
                 <select
-                  className="w-full p-2 border rounded"
-                  value={emailParams.length}
-                  onChange={(e) => setEmailParams(prev => ({ ...prev, length: e.target.value }))}
+                    className="w-full p-2 border rounded"
+                    value={emailParams.length}
+                    onChange={(e) => setEmailParams(prev => ({ ...prev, length: e.target.value }))}
                 >
-                  <option value="short">Ngắn</option>
-                  <option value="medium">Vừa</option>
-                  <option value="long">Dài</option>
+                    <option value="short">Ngắn</option>
+                    <option value="medium">Vừa</option>
+                    <option value="long">Dài</option>
                 </select>
-              </div>
+
+                <h4 className="font-medium">Model</h4>
+                <select
+                    className="w-full p-2 border rounded"
+                    value={selectedModel}
+                    onChange={handleModelChange}
+                >
+                    {availableModels.map((model) => (
+                        <option key={model.name} value={model.name}>
+                            {model.name}
+                        </option>
+                    ))}
+                </select>
+
+                <h4 className="font-medium">Output format</h4>
+                <select
+                  className="w-full p-2 border rounded"
+                  value={emailParams.outputFormat}
+                  onChange={(e) => setEmailParams(prev => ({ ...prev, outputFormat: e.target.value }))}
+                >
+                  <option value="markdown">Markdown</option>
+                  <option value="html">HTML</option>
+                  <option value="plain">Plain Text</option>
+                </select>
+
+                <h4 className="font-medium">Temperature</h4>
+                <input
+                  type="number"
+                  placeholder="Temperature (e.g., 0.7)"
+                  className="w-full p-2 border rounded"
+                  value={emailParams.temperature}
+                  onChange={(e) => setEmailParams(prev => ({...prev, temperature: parseFloat(e.target.value)}))}
+                  min="0"
+                  max="1"
+                  step="0.1"
+                />
+                </div>
 
               <button
                 onClick={generateEmail}
                 disabled={isGenerating}
                 className="w-full py-2 bg-purple-600 text-white rounded hover:bg-purple-700 disabled:bg-purple-300 flex items-center justify-center gap-2"
               >
-                {isGenerating ? (
+                {/* {isGenerating ? (
                   <>
                     <img src={loadingGif} alt="Loading..." className="h-5 w-5 inline-block mr-2" />
                     Đang tạo...
@@ -542,7 +632,9 @@ const EmailEditor = () => {
                     <Send size={18} />
                     Tạo Email
                   </>
-                )}
+                )} */}
+                <Send size={18}/>
+                Tạo Email
               </button>
             </div>
           </div>
