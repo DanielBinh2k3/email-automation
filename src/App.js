@@ -27,6 +27,10 @@ const EmailEditor = () => {
     personalization: 0,
   });
   const [suggestions, setSuggestions] = useState("");
+  // Model selection state
+  const [availableModels, setAvailableModels] = useState([]);
+  const [selectedModel, setSelectedModel] = useState(""); // Directly store the selected model name
+
 
   const [emailParams, setEmailParams] = useState({
     sales_info: {
@@ -46,18 +50,52 @@ const EmailEditor = () => {
         email: 'tranthib@congtyabc.com'
       }
     },
-    emailContext: '', // Will be populated in useEffect
+    emailContext: '',
     tone: 'professional',
     length: 'medium',
+    outputFormat: 'markdown', // Default output format
+    model: '', // Initialize model as empty string
+    temperature: 0.7,
   });
 
-  // Use useEffect to set the default emailContext
+  // Fetch available models on component mount
   useEffect(() => {
-    setEmailParams(prevParams => ({
-      ...prevParams,
-      emailContext: "Giới thiệu sản phẩm phần mềm quản lý doanh nghiệp Fastwork, bao gồm các tính năng nổi bật như quản lý công việc, quản lý nhân sự, quản lý khách hàng, và quản lý tài chính. Nhấn mạnh vào lợi ích của phần mềm trong việc nâng cao hiệu quả hoạt động và tăng trưởng doanh thu cho doanh nghiệp."
-    }));
-  }, []);
+    const fetchModels = async () => {
+      try {
+        const response = await fetch('https://email-api-c91g.onrender.com/api/models');
+        if (!response.ok) {
+          throw new Error(`HTTP error! status: ${response.status}`);
+        }
+        const data = await response.json();
+        // Assuming the API returns an array of model names like:  { models: [ {name: "model1"}, {name: "model2"}]}
+        setAvailableModels(data.models);
+
+        // Set a default model if available and no model is selected
+        if (data.models.length > 0 && !selectedModel) {
+          setSelectedModel(data.models[0].name);  // Select the first model
+          setEmailParams(prevParams => ({
+            ...prevParams,
+            model: data.models[0].name, // Set the initial model in emailParams too
+          }));
+        }
+
+      } catch (error) {
+        console.error("Could not fetch models:", error);
+        toast.error(`Failed to fetch models: ${error.message}`);
+      }
+    };
+
+    fetchModels();
+  }, []); // Empty dependency array means this runs once on mount
+
+    // Add useEffect to set default emailContext
+    useEffect(() => {
+        setEmailParams(prevParams => ({
+        ...prevParams,
+        emailContext: "Giới thiệu sản phẩm phần mềm quản lý doanh nghiệp Fastwork, bao gồm các tính năng nổi bật như quản lý công việc, quản lý nhân sự, quản lý khách hàng, và quản lý tài chính. Nhấn mạnh vào lợi ích của phần mềm trong việc nâng cao hiệu quả hoạt động và tăng trưởng doanh thu cho doanh nghiệp."
+        }));
+    }, []);
+
 
   const toolbarButtons = [
     { icon: <Bold size={18} />, label: 'Bold' },
@@ -101,6 +139,15 @@ const EmailEditor = () => {
       }
     });
   };
+  // Function to handle model selection
+  const handleModelChange = (event) => {
+      const modelName = event.target.value;
+        setSelectedModel(modelName);
+        setEmailParams(prevParams => ({
+          ...prevParams,
+          model: modelName  // Update the model in emailParams
+        }));
+  };
 
   const generateEmail = async () => {
     setIsGenerating(true);
@@ -119,8 +166,7 @@ const EmailEditor = () => {
       }
 
       const data = await response.json();
-      // data is already an object with { generatedEmail: ... }
-      setEmailContent(data.generatedEmail); // Access directly
+      setEmailContent(data.generatedEmail);
       setShowSuccessBar(true);
       toast.success("Email đã được tạo thành công!");
 
@@ -132,37 +178,37 @@ const EmailEditor = () => {
     }
   };
 
-    const refineEmail = async (refinementType) => {
-        setIsRefining(true);
-        try {
-            const requestBody = {
-                emailContent: emailContent,
-                refinementType: refinementType,
-                suggestions: refinementType === 'improvement' ? suggestions : undefined,
-            };
-            const response = await fetch('https://email-api-c91g.onrender.com/api/refine-email', {
-                method: 'POST',
-                headers: { 'Content-Type': 'application/json' },
-                body: JSON.stringify(requestBody),
-            });
+  const refineEmail = async (refinementType) => {
+    setIsRefining(true);
+    try {
+      const requestBody = {
+        emailContent: emailContent,
+        refinementType: refinementType,
+        suggestions: refinementType === 'improvement' ? suggestions : undefined,
+        model: selectedModel, // Include selected model
+        outputFormat: emailParams.outputFormat,
+        temperature: emailParams.temperature,
+      };
+      const response = await fetch('https://email-api-c91g.onrender.com/api/refine-email', {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify(requestBody),
+      });
+      if (!response.ok) {
+        const errorData = await response.json();
+        throw new Error(`HTTP error! status: ${response.status}, detail: ${errorData.detail}`);
+      }
+      const data = await response.json();
+      setEmailContent(data.refinedEmail);
+      toast.success("Email đã được tinh chỉnh thành công!");
 
-            if (!response.ok) {
-                const errorData = await response.json();
-                throw new Error(`HTTP error! status: ${response.status}, detail: ${errorData.detail}`);
-            }
-
-            const data = await response.json();
-             // data is already an object with { refinedEmail: ... }
-            setEmailContent(data.refinedEmail); // Access directly
-            toast.success("Email đã được tinh chỉnh thành công!");
-
-        } catch (error) {
-            console.error('Lỗi khi tinh chỉnh email:', error);
-            toast.error(`Lỗi khi tinh chỉnh: ${error.message}`);
-        } finally {
-            setIsRefining(false);
-        }
-    };
+    } catch (error) {
+      console.error('Lỗi khi tinh chỉnh email:', error);
+      toast.error(`Lỗi khi tinh chỉnh: ${error.message}`);
+    } finally {
+      setIsRefining(false);
+    }
+  };
 
   const scoreEmail = async () => {
     setIsScoring(true);
@@ -173,7 +219,12 @@ const EmailEditor = () => {
         headers: {
           'Content-Type': 'application/json',
         },
-        body: JSON.stringify({ emailContent: emailContent }),
+        body: JSON.stringify({
+          emailContent: emailContent,
+          model: selectedModel,
+          outputFormat: emailParams.outputFormat,
+          temperature: emailParams.temperature,
+        }),
       });
 
       if (!response.ok) {
@@ -183,16 +234,14 @@ const EmailEditor = () => {
 
       const data = await response.json();
 
-      // Now data is already parsed, so you access it directly
-        if (data && data.scores && data.suggestions) {
-            setScores(data.scores);
-            setSuggestions(data.suggestions);
-        } else {
-            console.error("Invalid response format:", data);
-            toast.error("Đã nhận được định dạng phản hồi không mong muốn từ máy chủ. Vui lòng thử lại.");
-            setShowScoreModal(false); // Hide on error
-
-        }
+      if (data && data.scores && data.suggestions) {
+        setScores(data.scores);
+        setSuggestions(data.suggestions);
+      } else {
+        console.error("Invalid response format:", data);
+        toast.error("Đã nhận được định dạng phản hồi không mong muốn từ máy chủ. Vui lòng thử lại.");
+        setShowScoreModal(false);
+      }
 
     } catch (error) {
       console.error('Lỗi khi chấm điểm email:', error);
@@ -211,11 +260,10 @@ const EmailEditor = () => {
     setIsGenerating(true);
     try {
       await refineEmail('improvement');
-      toast.success("Email đã được cải thiện thành công!");  // Now handled by refineEmail
+      toast.success("Email đã được cải thiện thành công!");
       closeModal();
     } catch (error) {
-        console.error('Lỗi khi tự động gợi ý email:', error);
-      // Error toast is handled by refineEmail
+        console.error('Lỗi khi tự động gợi ý email', error)
     } finally {
       setIsGenerating(false);
     }
@@ -473,46 +521,72 @@ const EmailEditor = () => {
               </div>
 
               {/* Email Parameters */}
-              <div className="space-y-3">
+                <div className="space-y-3">
                 <h4 className="font-medium">Nội dung/Bối cảnh Email</h4>
                 <textarea
-                  placeholder="Nội dung email"
-                  className="w-full p-2 border rounded h-24"
-                  value={emailParams.emailContext}
-                  onChange={(e) => setEmailParams(prev => ({ ...prev, emailContext: e.target.value }))}
+                    placeholder="Nội dung email"
+                    className="w-full p-2 border rounded h-24"
+                    value={emailParams.emailContext}
+                    onChange={(e) => setEmailParams(prev => ({ ...prev, emailContext: e.target.value }))}
                 />
                 <h4 className="font-medium">Giọng văn</h4>
                 <select
-                  className="w-full p-2 border rounded"
-                  value={emailParams.tone}
-                  onChange={(e) => setEmailParams(prev => ({ ...prev, tone: e.target.value }))}
+                    className="w-full p-2 border rounded"
+                    value={emailParams.tone}
+                    onChange={(e) => setEmailParams(prev => ({ ...prev, tone: e.target.value }))}
                 >
-                  <option value="professional">Chuyên nghiệp</option>
-                  <option value="friendly">Thân thiện</option>
-                  <option value="formal">Trang trọng</option>
-                  <option value="casual">Thường ngày</option>
+                    <option value="professional">Chuyên nghiệp</option>
+                    <option value="friendly">Thân thiện</option>
+                    <option value="formal">Trang trọng</option>
+                    <option value="casual">Thường ngày</option>
                 </select>
                 <h4 className="font-medium">Độ dài</h4>
                 <select
-                  className="w-full p-2 border rounded"
-                  value={emailParams.length}
-                  onChange={(e) => setEmailParams(prev => ({ ...prev, length: e.target.value }))}
+                    className="w-full p-2 border rounded"
+                    value={emailParams.length}
+                    onChange={(e) => setEmailParams(prev => ({ ...prev, length: e.target.value }))}
                 >
-                  <option value="short">Ngắn</option>
-                  <option value="medium">Vừa</option>
-                  <option value="long">Dài</option>
+                    <option value="short">Ngắn</option>
+                    <option value="medium">Vừa</option>
+                    <option value="long">Dài</option>
                 </select>
+
+                <h4 className="font-medium">Model</h4>
+                <select
+                    className="w-full p-2 border rounded"
+                    value={selectedModel}
+                    onChange={handleModelChange}
+                >
+                    {availableModels.map((model) => (
+                        <option key={model.name} value={model.name}>
+                            {model.name}
+                        </option>
+                    ))}
+                </select>
+
                 <h4 className="font-medium">Output format</h4>
                 <select
                   className="w-full p-2 border rounded"
-                  value={emailParams.model}
-                  onChange={(e) => setEmailParams(prev => ({ ...prev, length: e.target.value }))}
+                  value={emailParams.outputFormat}
+                  onChange={(e) => setEmailParams(prev => ({ ...prev, outputFormat: e.target.value }))}
                 >
                   <option value="markdown">Markdown</option>
                   <option value="html">HTML</option>
                   <option value="plain">Plain Text</option>
                 </select>
-              </div>
+
+                <h4 className="font-medium">Temperature</h4>
+                <input
+                  type="number"
+                  placeholder="Temperature (e.g., 0.7)"
+                  className="w-full p-2 border rounded"
+                  value={emailParams.temperature}
+                  onChange={(e) => setEmailParams(prev => ({...prev, temperature: parseFloat(e.target.value)}))}
+                  min="0"
+                  max="1"
+                  step="0.1"
+                />
+                </div>
 
               <button
                 onClick={generateEmail}
