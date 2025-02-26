@@ -502,6 +502,16 @@ const EmailEditor = () => {
                   <option value="medium">Vừa</option>
                   <option value="long">Dài</option>
                 </select>
+                <h4 className="font-medium">Output format</h4>
+                <select
+                  className="w-full p-2 border rounded"
+                  value={emailParams.model}
+                  onChange={(e) => setEmailParams(prev => ({ ...prev, length: e.target.value }))}
+                >
+                  <option value="markdown">Markdown</option>
+                  <option value="html">HTML</option>
+                  <option value="plain">Plain Text</option>
+                </select>
               </div>
 
               <button
