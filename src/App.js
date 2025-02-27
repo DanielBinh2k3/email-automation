@@ -62,7 +62,7 @@ const EmailEditor = () => {
   useEffect(() => {
     const fetchModels = async () => {
       try {
-        const response = await fetch('https://emailapi-fastwork.up.railway.app/api/models');
+        const response = await fetch('https://emailapi-mbw.up.railway.app/api/models');
         if (!response.ok) {
           throw new Error(`HTTP error! status: ${response.status}`);
         }
@@ -167,7 +167,7 @@ const EmailEditor = () => {
     setIsGenerating(true);
     toast.info(<div><img src={loadingGif} alt="Loading..." style={{ width: '20px', height: '20px', marginRight: '8px' }} /> Mô hình đang tạo email...</div>, { autoClose: false, toastId: 'loadingToast' }); // Keep toast open
     try {
-      const response = await fetch('https://emailapi-fastwork.up.railway.app/api/generate-email', {
+      const response = await fetch('https://emailapi-mbw.up.railway.app/api/generate-email', {
         method: 'POST',
         headers: {
           'Content-Type': 'application/json',
@@ -204,7 +204,7 @@ const EmailEditor = () => {
                 refinementType: refinementType,
                 suggestions: refinementType === 'improvement' ? suggestions : undefined,
             };
-            const response = await fetch('https://emailapi-fastwork.up.railway.app/api/refine-email', {
+            const response = await fetch('https://emailapi-mbw.up.railway.app/api/refine-email', {
                 method: 'POST',
                 headers: { 'Content-Type': 'application/json' },
                 body: JSON.stringify(requestBody),
@@ -222,7 +222,7 @@ const EmailEditor = () => {
         outputFormat: emailParams.outputFormat,
         temperature: emailParams.temperature,
       };
-      const response = await fetch('https://emailapi-fastwork.up.railway.app/api/refine-email', {
+      const response = await fetch('https://emailapi-mbw.up.railway.app/api/refine-email', {
         method: 'POST',
         headers: { 'Content-Type': 'application/json' },
         body: JSON.stringify(requestBody),
@@ -256,7 +256,7 @@ const EmailEditor = () => {
     
     try {
 <<<<<<< HEAD
-      const response = await fetch('https://emailapi-fastwork.up.railway.app/api/score-email', {
+      const response = await fetch('https://emailapi-mbw.up.railway.app/api/score-email', {
 =======
       let emailToScore = emailContent;
       let formatToUse = emailParams.outputFormat;
@@ -268,7 +268,7 @@ const EmailEditor = () => {
           toast.info('Đang chuyển đổi HTML sang định dạng phù hợp...', {autoClose: 2000});
           
           // Gọi API để chuyển đổi HTML sang markdown hoặc text
-          const conversionResponse = await fetch('https://emailapi-fastwork.up.railway.app/api/convert-format', {
+          const conversionResponse = await fetch('https://emailapi-mbw.up.railway.app/api/convert-format', {
             method: 'POST',
             headers: {
               'Content-Type': 'application/json',
@@ -303,7 +303,7 @@ const EmailEditor = () => {
       }
       
       // Gửi yêu cầu chấm điểm với nội dung đã xử lý
-      const response = await fetch('https://emailapi-fastwork.up.railway.app/api/score-email', {
+      const response = await fetch('https://emailapi-mbw.up.railway.app/api/score-email', {
 >>>>>>> 91d69929ce7423a03352dffe9a6649ef06ac31dc
         method: 'POST',
         headers: {
