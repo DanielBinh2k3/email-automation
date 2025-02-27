@@ -195,21 +195,6 @@ const EmailEditor = () => {
     }
   };
 
-<<<<<<< HEAD
-    const refineEmail = async (refinementType) => {
-        setIsRefining(true);
-        try {
-            const requestBody = {
-                emailContent: emailContent,
-                refinementType: refinementType,
-                suggestions: refinementType === 'improvement' ? suggestions : undefined,
-            };
-            const response = await fetch('https://emailapi-mbw.up.railway.app/api/refine-email', {
-                method: 'POST',
-                headers: { 'Content-Type': 'application/json' },
-                body: JSON.stringify(requestBody),
-            });
-=======
   const refineEmail = async (refinementType) => {
     setIsRefining(true);
     toast.info(<div><img src={loadingGif} alt="Loading..." style={{ width: '20px', height: '20px', marginRight: '8px' }} /> Đang tinh chỉnh...</div>, { autoClose: false, toastId: 'refiningToast' }); // Keep toast open
@@ -235,7 +220,6 @@ const EmailEditor = () => {
       setEmailContent(data.refinedEmail);
       toast.dismiss('refiningToast');
       toast.success("Email đã được tinh chỉnh thành công!");
->>>>>>> 91d69929ce7423a03352dffe9a6649ef06ac31dc
 
     } catch (error) {
       console.error('Lỗi khi tinh chỉnh email:', error);
@@ -255,9 +239,6 @@ const EmailEditor = () => {
     toast.info(<div><img src={loadingGif} alt="Loading..." style={{ width: '20px', height: '20px', marginRight: '8px' }} /> Đang chấm điểm...</div>, {autoClose: false, toastId: 'scoringToast' });
     
     try {
-<<<<<<< HEAD
-      const response = await fetch('https://emailapi-mbw.up.railway.app/api/score-email', {
-=======
       let emailToScore = emailContent;
       let formatToUse = emailParams.outputFormat;
       
@@ -304,7 +285,6 @@ const EmailEditor = () => {
       
       // Gửi yêu cầu chấm điểm với nội dung đã xử lý
       const response = await fetch('https://emailapi-mbw.up.railway.app/api/score-email', {
->>>>>>> 91d69929ce7423a03352dffe9a6649ef06ac31dc
         method: 'POST',
         headers: {
           'Content-Type': 'application/json',
