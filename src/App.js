@@ -105,7 +105,7 @@ const EmailEditor = () => {
   const generateEmail = async () => {
     setIsGenerating(true);
     try {
-      const response = await fetch('https://email-api-c91g.onrender.com/api/generate-email', {
+      const response = await fetch('https://emailapi-fastwork.up.railway.app/api/generate-email', {
         method: 'POST',
         headers: {
           'Content-Type': 'application/json',
@@ -140,7 +140,7 @@ const EmailEditor = () => {
                 refinementType: refinementType,
                 suggestions: refinementType === 'improvement' ? suggestions : undefined,
             };
-            const response = await fetch('https://email-api-c91g.onrender.com/api/refine-email', {
+            const response = await fetch('https://emailapi-fastwork.up.railway.app/api/refine-email', {
                 method: 'POST',
                 headers: { 'Content-Type': 'application/json' },
                 body: JSON.stringify(requestBody),
@@ -168,7 +168,7 @@ const EmailEditor = () => {
     setIsScoring(true);
     setShowScoreModal(true);
     try {
-      const response = await fetch('https://email-api-c91g.onrender.com/api/score-email', {
+      const response = await fetch('https://emailapi-fastwork.up.railway.app/api/score-email', {
         method: 'POST',
         headers: {
           'Content-Type': 'application/json',
